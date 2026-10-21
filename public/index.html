@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real Terminal</title>
+    <style>
+      :root {
+        --bg: #0b1016;
+        --panel: #111922;
+        --line: #2d3b46;
+        --text: #dfeaf0;
+        --muted: #8aa0ad;
+        --green: #7ee787;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .terminal {
+        width: min(1100px, 96vw);
+        height: min(760px, 90vh);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        font-weight: 700;
+        color: #bfd5e8;
+      }
+
+      .dots {
+        display: flex;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .dot.red { background: #ff5f57; }
+      .dot.yellow { background: #febc2e; }
+      .dot.green { background: #28c840; }
+
+      .output {
+        flex: 1;
+        overflow: auto;
+        padding: 16px;
+        white-space: pre-wrap;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-top: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        padding: 12px 14px;
+      }
+
+      .prompt {
+        color: var(--green);
+        font-weight: 700;
+        user-select: none;
+      }
+
+      .input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font: 14px/1.5 monospace;
+      }
+
+      .input::placeholder {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="terminal">
+      <div class="titlebar">
+        <div class="dots">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div>bash</div>
+      </div>
+
+      <div id="output" class="output"></div>
+
+      <div class="input-row">
+        <span class="prompt">$</span>
+        <input id="input" class="input" type="text" autocomplete="off" spellcheck="false" placeholder="Type a command..." />
+      </div>
+    </div>
+
+    <script>
+      const output = document.getElementById('output');
+      const input = document.getElementById('input');
+      const prompt = '$';
+      let socket;
+      let connected = false;
+
+      function append(message) {
+        output.textContent += message;
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function connect() {
+        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+        socket = new WebSocket(`${protocol}://${location.host}`);
+
+        socket.addEventListener('open', () => {
+          connected = true;
+        });
+
+        socket.addEventListener('message', (event) => {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === 'welcome') {
+            append(msg.data);
+          } else if (msg.type === 'output') {
+            append(msg.data);
+          } else if (msg.type === 'clear') {
+            output.textContent = '';
+          } else if (msg.type === 'exit') {
+            append(`\nShell exited with code ${msg.code}\n`);
+          }
+        });
+
+        socket.addEventListener('close', () => {
+          connected = false;
+          append('\nConnection closed. Refresh to reconnect.\n');
+        });
+
+        socket.addEventListener('error', () => {
+          append('WebSocket connection failed.\n');
+        });
+      }
+
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+
+        const command = input.value;
+        input.value = '';
+
+        if (!command.trim()) {
+          append(`${prompt} `);
+          return;
+        }
+
+        append(`${prompt} ${command}\n`);
+
+        if (!connected || socket.readyState !== WebSocket.OPEN) {
+          append('Connection not ready.\n');
+          return;
+        }
+
+        socket.send(command);
+      });
+
+      connect();
+      input.focus();
+    </script>
+  </body>
+</html>
